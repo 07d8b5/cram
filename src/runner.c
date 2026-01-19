@@ -474,7 +474,11 @@ static int init_runtime(const struct ctx* c, struct runtime* rt) {
     return -1;
   if (!validate_ptr(c->rng))
     return -1;
-  if (!assert_ok(c->session->group_count > 0))
+
+  const struct Session* session = c->session;
+  size_t group_count = session->group_count;
+
+  if (!assert_ok(group_count > 0))
     return -1;
 
   rt->order_pos = 0;
@@ -490,7 +494,6 @@ static int init_runtime(const struct ctx* c, struct runtime* rt) {
     return -1;
   struct Rng* rng = c->rng;
   size_t* group_order = c->group_order;
-  size_t group_count = c->session->group_count;
 
   rc = rng_shuffle_groups(rng, group_order, group_count);
   if (rc != 0)
@@ -502,7 +505,6 @@ static int init_runtime(const struct ctx* c, struct runtime* rt) {
   if (rc != 0)
     return -1;
 
-  struct Session* session = c->session;
   size_t group_index = rt->group_index;
   const struct Group* group = &session->groups[group_index];
   size_t count = group->item_count;
