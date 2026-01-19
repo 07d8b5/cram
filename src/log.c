@@ -52,6 +52,8 @@ static int cksum_bytes(u32* out, const unsigned char* buf, size_t len) {
 }
 
 static size_t sanitize_path(const char* path, char* out, size_t out_len) {
+  if (!validate_ptr(out))
+    return 0;
   if (!out_len)
     return 0;
   if (!path) {
@@ -61,10 +63,12 @@ static size_t sanitize_path(const char* path, char* out, size_t out_len) {
 
   size_t j = 0;
 
-  for (size_t i = 0; path[i] != '\0'; i++) {
+  for (size_t i = 0; i < MAX_LINE_LEN; i++) {
     if (j + 1 >= out_len)
       break;
     char ch = path[i];
+    if (ch == '\0')
+      break;
 
     if (ch == '\n' || ch == '\r')
       ch = ' ';

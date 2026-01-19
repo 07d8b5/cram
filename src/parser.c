@@ -50,7 +50,9 @@ static size_t trim_left_index(const char* line, size_t line_len) {
   if (!validate_ok(line_len <= MAX_LINE_LEN))
     return line_len;
 
-  for (size_t i = 0; i < line_len; i++) {
+  for (size_t i = 0; i < MAX_LINE_LEN; i++) {
+    if (i >= line_len)
+      break;
     if (!isspace((unsigned char)line[i]))
       return i;
   }
@@ -66,7 +68,9 @@ static size_t trim_right_index(
 
   size_t end = line_len;
 
-  for (size_t i = 0; i < line_len; i++) {
+  for (size_t i = 0; i < MAX_LINE_LEN; i++) {
+    if (i >= line_len)
+      break;
     if (end <= start || end == 0)
       break;
     if (!isspace((unsigned char)line[end - 1]))
