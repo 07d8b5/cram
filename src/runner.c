@@ -24,10 +24,28 @@ struct ctx {
   struct Session* session;
   struct Rng* rng;
   size_t* group_order;
-  size_t group_order_cap;
   size_t* item_order;
-  size_t item_order_cap;
 };
+
+static int assert_session_bounds(const struct Session* session) {
+  if (!validate_ptr(session))
+    return -1;
+  if (!assert_ok(session->group_count > 0))
+    return -1;
+  if (!assert_ok(session->group_count <= MAX_GROUPS))
+    return -1;
+
+  for (size_t i = 0; i < MAX_GROUPS; i++) {
+    if (i >= session->group_count)
+      break;
+    size_t count = session->groups[i].item_count;
+    if (!assert_ok(count > 0))
+      return -1;
+    if (!assert_ok(count <= MAX_ITEMS_PER_GROUP))
+      return -1;
+  }
+  return 0;
+}
 
 static int now_ms(u64* out_ms) {
   if (!validate_ptr(out_ms))
@@ -94,11 +112,7 @@ static int init_group_order(const struct ctx* c) {
     return -1;
   if (!validate_ptr(c->group_order))
     return -1;
-  if (!assert_ok(c->session->group_count <= MAX_GROUPS))
-    return -1;
-  if (!assert_ok(c->session->group_count > 0))
-    return -1;
-  if (!assert_ok(c->group_order_cap >= c->session->group_count))
+  if (assert_session_bounds(c->session) != 0)
     return -1;
 
   for (size_t i = 0; i < MAX_GROUPS; i++) {
@@ -117,8 +131,6 @@ static int init_item_order(const struct ctx* c, size_t group_index) {
   if (!validate_ptr(c->item_order))
     return -1;
   if (!assert_ok(group_index < c->session->group_count))
-    return -1;
-  if (!assert_ok(c->item_order_cap >= MAX_ITEMS_PER_GROUP))
     return -1;
 
   size_t count = c->session->groups[group_index].item_count;
@@ -162,6 +174,8 @@ static int select_next_group(const struct ctx* c, struct runtime* rt) {
       return -1;
   }
   rt->group_index = c->group_order[rt->order_pos];
+  if (!assert_ok(rt->group_index < c->session->group_count))
+    return -1;
   rt->order_pos++;
   return 0;
 }
@@ -181,6 +195,8 @@ static int select_next_item(const struct ctx* c, struct runtime* rt) {
   size_t count = c->session->groups[rt->group_index].item_count;
 
   if (!assert_ok(count > 0))
+    return -1;
+  if (!assert_ok(count <= MAX_ITEMS_PER_GROUP))
     return -1;
 
   if (rt->item_pos >= count)
@@ -202,6 +218,8 @@ static int update_group_timer(const struct ctx* c, struct runtime* rt) {
   unsigned int seconds = c->session->groups[rt->group_index].seconds;
 
   if (!assert_ok(seconds > 0))
+    return -1;
+  if (!assert_ok(seconds <= MAX_GROUP_SECONDS))
     return -1;
 
   u64 now = 0;
@@ -229,6 +247,8 @@ static int advance_prompt(
   size_t count = c->session->groups[rt->group_index].item_count;
 
   if (!assert_ok(count > 0))
+    return -1;
+  if (!assert_ok(count <= MAX_ITEMS_PER_GROUP))
     return -1;
 
   if (due_to_switch) {
@@ -458,6 +478,8 @@ static int init_runtime(const struct ctx* c, struct runtime* rt) {
 
   if (!assert_ok(count > 0))
     return -1;
+  if (!assert_ok(count <= MAX_ITEMS_PER_GROUP))
+    return -1;
   rc = rng_shuffle_items(c->rng, c->item_order, count);
   if (rc != 0)
     return -1;
@@ -476,52 +498,18 @@ static int init_runtime(const struct ctx* c, struct runtime* rt) {
   return 0;
 }
 
-static int run_with_terminal(const struct ctx* c, struct runtime* rt) {
-  if (!validate_ptr(c))
-    return -1;
-  if (!validate_ptr(rt))
-    return -1;
-
-  char err_buf[256];
-  struct TermState term = { 0 };
-  int rc = term_enter_raw(&term, err_buf, sizeof(err_buf));
-
-  if (rc != 0) {
-    rc = fprintf(stderr, "Error: %s\n", err_buf);
-    if (rc < 0)
-      return -1;
-    return -1;
-  }
-
-  int hide_rc = term_hide_cursor();
-  int loop_rc = -1;
-
-  if (hide_rc == 0)
-    loop_rc = run_loop(c, rt);
-
-  int restore_rc = term_restore(&term);
-  int show_rc = term_show_cursor();
-  int clear_rc = term_clear_screen();
-
-  if (!assert_ok(restore_rc == 0))
-    return -1;
-  if (!assert_ok(show_rc == 0))
-    return -1;
-  if (!assert_ok(clear_rc == 0))
-    return -1;
-
-  if (hide_rc != 0)
-    return -1;
-  return loop_rc;
-}
-
-int runner_run(struct Session* session,
+int runner_run(struct TermState* term,
+    struct Session* session,
     struct Rng* rng,
     size_t* group_order,
-    size_t group_order_cap,
-    size_t* item_order,
-    size_t item_order_cap) {
+    size_t* item_order) {
+  if (!validate_ptr(term))
+    return -1;
+  if (!assert_ok(term->active == 1))
+    return -1;
   if (!validate_ptr(session))
+    return -1;
+  if (assert_session_bounds(session) != 0)
     return -1;
   if (!validate_ptr(rng))
     return -1;
@@ -529,25 +517,19 @@ int runner_run(struct Session* session,
     return -1;
   if (!validate_ptr(item_order))
     return -1;
-  if (!assert_ok(group_order_cap > 0))
-    return -1;
-  if (!assert_ok(item_order_cap > 0))
-    return -1;
 
   struct ctx c = {
     .session = session,
     .rng = rng,
     .group_order = group_order,
-    .group_order_cap = group_order_cap,
     .item_order = item_order,
-    .item_order_cap = item_order_cap,
   };
   struct runtime rt;
   int rc = init_runtime(&c, &rt);
 
   if (rc != 0)
     return -1;
-  rc = run_with_terminal(&c, &rt);
+  rc = run_loop(&c, &rt);
   if (rc != 0)
     return -1;
   return 0;
