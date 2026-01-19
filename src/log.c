@@ -231,29 +231,31 @@ int log_prompt(
 
   const struct Group* group = &session->groups[group_index];
   const struct Item* item = &session->items[item_index];
+  const char* buf = session->buffer;
+  u32 group_name_offset = group->name_offset;
+  u32 group_name_length = group->name_length;
+  u32 item_offset = item->offset;
+  u32 item_length = item->length;
 
-  size_t group_name_end =
-      (size_t)group->name_offset + (size_t)group->name_length;
+  size_t group_name_end = (size_t)group_name_offset + (size_t)group_name_length;
 
   if (!assert_ok(group_name_end <= session->buffer_len))
     return -1;
 
-  size_t item_end = (size_t)item->offset + (size_t)item->length;
+  size_t item_end = (size_t)item_offset + (size_t)item_length;
 
   if (!assert_ok(item_end <= session->buffer_len))
     return -1;
 
-  const unsigned char* gname =
-      (const unsigned char*)&session->buffer[group->name_offset];
-  const unsigned char* ibytes =
-      (const unsigned char*)&session->buffer[item->offset];
+  const unsigned char* gname = (const unsigned char*)&buf[group_name_offset];
+  const unsigned char* ibytes = (const unsigned char*)&buf[item_offset];
 
   u32 gck = 0;
-  int rc = cksum_bytes(&gck, gname, (size_t)group->name_length);
+  int rc = cksum_bytes(&gck, gname, (size_t)group_name_length);
   if (rc != 0)
     return -1;
   u32 ick = 0;
-  rc = cksum_bytes(&ick, ibytes, (size_t)item->length);
+  rc = cksum_bytes(&ick, ibytes, (size_t)item_length);
   if (rc != 0)
     return -1;
 
@@ -264,9 +266,9 @@ int log_prompt(
       group_index,
       item_index,
       gck,
-      (unsigned int)group->name_length,
+      (unsigned int)group_name_length,
       ick,
-      (unsigned int)item->length);
+      (unsigned int)item_length);
   if (!assert_ok(rc > 0))
     return -1;
   if (!assert_ok((size_t)rc < sizeof(msg)))
