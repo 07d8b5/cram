@@ -86,7 +86,7 @@ int term_enter_raw(struct TermState* state, char* err_buf, size_t err_len) {
 }
 
 int term_restore(struct TermState* state) {
-  if (!assert_ptr(state))
+  if (!validate_ptr(state))
     return -1;
   if (!assert_ok(state->active == 0 || state->active == 1))
     return -1;
@@ -119,9 +119,9 @@ int term_show_cursor(void) {
 }
 
 int term_read_key_timeout(int timeout_ms, int* out_key) {
-  if (!assert_ptr(out_key))
+  if (!validate_ptr(out_key))
     return -1;
-  if (!assert_ok(timeout_ms >= -1))
+  if (!validate_ok(timeout_ms >= -1))
     return -1;
 
   fd_set readfds;
@@ -147,6 +147,10 @@ int term_read_key_timeout(int timeout_ms, int* out_key) {
   }
   if (ready == 0)
     return 0;
+  if (!assert_ok(ready == 1))
+    return -1;
+  if (!assert_ok(FD_ISSET(STDIN_FILENO, &readfds)))
+    return -1;
 
   unsigned char ch = 0;
   ssize_t n = read(STDIN_FILENO, &ch, 1);
