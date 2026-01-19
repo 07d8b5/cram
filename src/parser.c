@@ -100,7 +100,9 @@ static int find_pipe_index(
   if (!validate_ptr(out_index))
     return -1;
 
-  for (size_t i = 1; i + 1 < line_len && i < MAX_LINE_LEN; i++) {
+  for (size_t i = 1; i < MAX_LINE_LEN; i++) {
+    if (i + 1 >= line_len)
+      break;
     if (line[i] == '|') {
       *out_index = i;
       return 0;
