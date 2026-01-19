@@ -323,7 +323,11 @@ static int parse_session_buffer(
   if (session->group_count == 0)
     return set_error(err_buf, err_len, "no groups found");
   if (state.has_group) {
-    const struct Group* group = &session->groups[state.current_group];
+    size_t group_index = state.current_group;
+
+    if (!assert_ok(group_index < session->group_count))
+      return -1;
+    const struct Group* group = &session->groups[group_index];
     if (group->item_count == 0)
       return set_error_line(
           err_buf, err_len, state.line_no, "last group has no items");
