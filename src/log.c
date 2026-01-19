@@ -50,16 +50,43 @@ static size_t sanitize_path(const char *path, char *out, size_t out_len)
 	}
 
 	size_t j = 0;
+
 	for (size_t i = 0; path[i] != '\0'; i++) {
 		if (j + 1 >= out_len)
 			break;
 		char ch = path[i];
+
 		if (ch == '\n' || ch == '\r')
 			ch = ' ';
 		out[j++] = ch;
 	}
 	out[j] = '\0';
 	return j;
+}
+
+static size_t sanitize_abs_path(const char *path, char *out, size_t out_len)
+{
+	if (!out_len)
+		return 0;
+	if (!path || path[0] == '\0') {
+		out[0] = '\0';
+		return 0;
+	}
+
+	if (path[0] == '/')
+		return sanitize_path(path, out, out_len);
+
+	char cwd[256];
+
+	if (!getcwd(cwd, sizeof(cwd)))
+		return sanitize_path(path, out, out_len);
+
+	char abs_buf[384];
+	int rc = snprintf(abs_buf, sizeof(abs_buf), "%s/%s", cwd, path);
+
+	if (rc < 0 || (size_t)rc >= sizeof(abs_buf))
+		return sanitize_path(path, out, out_len);
+	return sanitize_path(abs_buf, out, out_len);
 }
 
 static int write_all_fd(int fd, const char *buf, size_t len)
@@ -174,7 +201,8 @@ int log_key(int key)
 	return log_write("key", msg);
 }
 
-int log_prompt(const struct Session *session, size_t group_index, size_t item_index)
+int log_prompt(const struct Session *session, size_t group_index,
+	       size_t item_index)
 {
 	if (!validate_ptr(session))
 		return -1;
@@ -192,11 +220,15 @@ int log_prompt(const struct Session *session, size_t group_index, size_t item_in
 	const struct Group *group = &session->groups[group_index];
 	const struct Item *item = &session->items[item_index];
 
-	if (!assert_ok((size_t)group->name_offset + (size_t)group->name_length <=
-		       session->buffer_len))
+	size_t group_name_end =
+		(size_t)group->name_offset + (size_t)group->name_length;
+
+	if (!assert_ok(group_name_end <= session->buffer_len))
 		return -1;
-	if (!assert_ok((size_t)item->offset + (size_t)item->length <=
-		       session->buffer_len))
+
+	size_t item_end = (size_t)item->offset + (size_t)item->length;
+
+	if (!assert_ok(item_end <= session->buffer_len))
 		return -1;
 
 	const unsigned char *gname =
@@ -273,13 +305,15 @@ int log_input(const struct Session *session, const char *path)
 			     session->buffer_len);
 
 	char safe_path[192];
-	size_t have_path = sanitize_path(path, safe_path, sizeof(safe_path));
+	size_t have_path = sanitize_abs_path(path, safe_path,
+					     sizeof(safe_path));
 
 	char msg[256];
 	int rc = 0;
+
 	if (have_path) {
-		rc = snprintf(msg, sizeof(msg), "cksum=%u len=%zu path=%s", ck,
-			      session->buffer_len, safe_path);
+		rc = snprintf(msg, sizeof(msg), "cksum=%u len=%zu path=%s",
+			      ck, session->buffer_len, safe_path);
 	} else {
 		rc = snprintf(msg, sizeof(msg), "cksum=%u len=%zu", ck,
 			      session->buffer_len);
