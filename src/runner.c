@@ -165,13 +165,16 @@ static int select_next_group(const struct ctx* c, struct runtime* rt) {
     return -1;
   if (!validate_ptr(c->group_order))
     return -1;
-  if (!assert_ok(c->session->group_count > 0))
+
+  const struct Session* session = c->session;
+  size_t group_count = session->group_count;
+
+  if (!assert_ok(group_count > 0))
     return -1;
 
-  if (rt->order_pos >= c->session->group_count) {
+  if (rt->order_pos >= group_count) {
     struct Rng* rng = c->rng;
     size_t* group_order = c->group_order;
-    size_t group_count = c->session->group_count;
     int rc = rng_shuffle_groups(rng, group_order, group_count);
     if (rc != 0)
       return -1;
@@ -181,7 +184,7 @@ static int select_next_group(const struct ctx* c, struct runtime* rt) {
       return -1;
   }
   rt->group_index = c->group_order[rt->order_pos];
-  if (!assert_ok(rt->group_index < c->session->group_count))
+  if (!assert_ok(rt->group_index < group_count))
     return -1;
   rt->order_pos++;
   return 0;
